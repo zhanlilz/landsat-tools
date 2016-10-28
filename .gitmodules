@@ -1,3 +1,4 @@
 [submodule "espa-bulk-downloader"]
 	path = espa-bulk-downloader
 	url = git@github.com:Woodstonelee/espa-bulk-downloader.git
+        ignore = dirty
