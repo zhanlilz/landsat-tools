@@ -97,19 +97,20 @@ if [[ ${CLEAN} -eq 1 ]]; then
 fi
 
 TARFILES=($(find ${TARDIR} -maxdepth 1 -name "*.tar.gz"))
-# MD5FILES=($(ls "${MD5DIR}/*.md5"))
 
-echo "${#TARFILES[@]} files to validate"
+NFILES=${#TARFILES[@]}
+echo "${NFILES} files to validate"
 
 if [[ -n ${OUTPUT} ]]; then
     > ${OUTPUT}
-else
-    echo "Corrupted files: "
 fi
 
-for (( i=0; i<${#TARFILES[@]}; ++i ))
+for (( i=0; i<${NFILES}; ++i ))
 do
     tarf=${TARFILES[i]}
+
+    echo "<-- $((i+1)) / ${NFILES}, validate ${tarf}"    
+    
     testmd5=$(md5sum ${tarf} | cut -d ' ' -f 1 | tr -d ' ')
     # get the correct MD5 from .md5 file
     md5fbase="$(basename ${tarf} .tar.gz)"
@@ -118,24 +119,25 @@ do
         tmpstr=$(cat ${md5f})
         IFS=' '; read -r -a truemd5 <<< "${tmpstr}"
         if [[ ${truemd5[1]} != "${md5fbase}.tar.gz" ]]; then
-            echo "MD5 file content does not match file name: ${md5fbase}.md5"
+            echo -e "\tMD5 file content does not match file name: ${md5fbase}.md5"
         else
             tmpmd5=${truemd5[0]}
             # echo ${tmpmd5^^}, ${testmd5^^}
             if [[ ${tmpmd5^^} != ${testmd5^^} ]]; then
-                if [[ -z ${OUTPUT} ]]; then
-                    echo $(echo ${md5fbase} | cut -d '-' -f 1)
-                else
+                echo -e "\tCorrupted."
+                if [[ -w ${OUTPUT} ]]; then
                     echo ${md5fbase} | cut -d '-' -f 1 >> ${OUTPUT}
                 fi
                 if [[ ${CLEAN} -eq 1 ]]; then
                     rm -rf ${tarf}
                     rm -rf ${md5f}
                 fi
+            else
+                echo -e "\tValid."
             fi
         fi
     else
-        echo "MD5 file not found: ${md5fbase}.md5"
+        echo -e "\tMD5 file not found: ${md5fbase}.md5"
     fi
 done
 
