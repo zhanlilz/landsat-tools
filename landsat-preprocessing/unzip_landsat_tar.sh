@@ -8,8 +8,6 @@
 # Zhan Li, zhan.li@umb.edu
 # Created: Sun Feb 28 11:02:26 EST 2016
 
-# !!! currently only support running in the current folder.
-
 # We want to find things ONLY in our current directory, not in any subfolders
 #     So, we use -maxdepth 1 option
 #     You could also just use "ls *tar.gz", 
