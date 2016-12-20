@@ -39,10 +39,13 @@ Options:
 EOF
 
 # some default setting
-exe="/home/zhan.li/Workspace/src-programs/landsat-tools/landsat-utils/subset-landsat-albedo/sub"
-pattern="lndAlbedo*.bin"
+pattern="L*albedo*.bin"
+# where is our sub command, by default in the same folder as this
+# shell script
+exe_dir=$(readlink -f ${0} | xargs dirname)
+exe="${exe_dir}/sub"
 
-OPTS=`getopt -o w:d:o:p:: --long lat:,lon:,window:,directory:,output:,pattern:: -n 'subset_landsat_albedo' -- "$@"`
+OPTS=`getopt -o w:d:o:p: --long lat:,lon:,window:,directory:,output:,pattern: -n 'subset_landsat_albedo' -- "$@"`
 if [[ $? != 0 ]]; then echo "Failed parsing options"; exit 1; fi
 eval set -- "${OPTS}"
 while true; 
@@ -107,23 +110,25 @@ lnds=($(find $dir/ -name "${pattern}"))
 
 echo "Number of files found = ${#lnds[@]}"
 
-echo "Path_Row,Year,DOY,Lat,Lon,Sensor,Scene_ID,BSA_mean,BSA_sd,BSA_count,WSA_mean,WSA_sd,WSA_count,Blue_mean,Blue_sd,Blue_count" > ${out}
+echo "Path_Row,Year,DOY,Lat,Lon,Sensor,Scene_ID,BSA_mean,BSA_sd,BSA_count,WSA_mean,WSA_sd,WSA_count" > ${out}
 for envi in ${lnds[@]}; do
-        base=${envi#*lndAlbedo_}
-        echo $base
-        year=${base:9:4}
-        doy=${base:13:3}
-        path=${base:3:3}
-        row=${base:6:3}
-        sensor=${base:0:3}
-        tile="PATH${path}_ROW${row}"
-        echo ${year} ${doy} ${sensor} ${tile}
+    base=$(basename ${envi})
+    base=${base%"_albedo_broad.bin"}
+    echo $base
+    year=${base:9:4}
+    doy=${base:13:3}
+    path=${base:3:3}
+    row=${base:6:3}
+    sensor=${base:0:3}
+    tile="PATH${path}_ROW${row}"
+    echo ${year} ${doy} ${sensor} ${tile}
 
-        tmpout=$($exe $envi $lat $lon $window $year $doy $tile $sensor $base)
-        if [ $? -ne 0 ]; then
-                echo "ERROR, subsetting ${base}"
-                continue
-        else
-            echo ${tmpout} >> ${out}
-        fi
+    echo $exe $envi $lat $lon $window $year $doy $tile $sensor $base        
+    tmpout=$($exe $envi $lat $lon $window $year $doy $tile $sensor $base)
+    if [ $? -ne 0 ]; then
+        echo "ERROR, subsetting ${base}"
+        continue
+    else
+        echo ${tmpout} >> ${out}
+    fi
 done
