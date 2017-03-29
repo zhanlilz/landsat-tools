@@ -15,6 +15,8 @@ import types
 import numpy as np
 from osgeo import gdal, gdal_array, osr
 
+import matplotlib as mpl
+mpl.use('Agg')
 import matplotlib.pyplot as plt
 from mpl_toolkits.basemap import Basemap
 
