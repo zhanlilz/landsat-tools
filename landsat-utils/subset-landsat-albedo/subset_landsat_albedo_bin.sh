@@ -93,6 +93,8 @@ if [ -z ${lat} ] || [ -z ${lon} ] || [ -z ${window} ] || [ -z ${dir} ] || [ -z $
     exit 1
 fi
 
+dir=$(readlink -f ${dir})
+
 echo "Lat = ${lat}, Lon = ${lon}"
 echo "Footprint = ${window}"
 echo "Input directory = ${dir}"
