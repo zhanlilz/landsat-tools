@@ -166,10 +166,11 @@ def main(cmdargs):
                 nodata = nodata_def
             img = band.ReadAsArray()
             img = img[min_line:min_line+out_nline, min_sample:min_sample+out_nsample]
+            mask = img != nodata
+
             img = (img - stretch_range[0]) / (stretch_range[1] - stretch_range[0])
             img[img<0] = 0
-            img[img>1] = 1
-            mask = img != nodata
+            img[img>1] = 1            
             inset_data_list.append(img)
             inset_mask_list.append(mask)
         ds = None
