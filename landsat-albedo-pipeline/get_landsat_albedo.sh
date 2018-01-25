@@ -134,6 +134,8 @@ fi
 angle_exe=${alb_dir}/bin/l8_angles
 pcf_template=${alb_dir}/scripts/multilndalbedo_pcf_template.ini
 
+echo "Getting Landsat albedo from ${XML_LIST[0]}"
+
 # Print some processing metadata before running
 if [[ -x ${brdf_dl_cmd} ]]; then
     echo "Checked, source BRDF downloading command = ${brdf_dl_cmd}"
@@ -310,5 +312,5 @@ if [[ ${KEEP_T} -eq 0 ]]; then
     rm -rf ${TEMPDIR}
 fi
 
-echo "Success ${PRD_ID}."
+echo "Got Landsat albedo from ${XML_LIST[0]}."
 echo ""
