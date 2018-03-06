@@ -1,18 +1,23 @@
 #!/bin/bash
 
 read -d '' USAGE <<EOF
-$(basename ${0}) [options] --od output_dir target_xml mate_xml1 mate_xml2 ... mate_xmln
+$(basename ${0}) [options] --brdf source_brdf_type --bd source_brdf_directory --od output_dir target_xml mate_xml1 mate_xml2 ... mate_xmln
 
 Options:
 
-  --od, required
-    Output directory to save albedo product files for this target_xml.
+  --od="OUTPUT_DIRECTORY", required
+    Output directory where a subfolder named with product ID is
+    created; In this subfolder, albedo product files for this
+    target_xml are saved.
+
+  --brdf="SOURCE_BRDF_TYPE", required
+    Source dataset of BRDF, 'MODIS' or 'VIIRS'. Default: 'MODIS'
+
+  --bd="SOURCE_BRDF_DIRECTORY", requried
+    Directory to the source BRDF data.
 
   -s, --snow, optional
     Turn on snow-included albedo generation.
-
-  --brdf, optional
-    Source dataset of BRDF, 'MODIS' or 'VIIRS'. Default: 'MODIS'
 
   --of="OUTPUT_FORMAT", optional
     Designate output format in either "hdf" or "h5"; default:
@@ -41,25 +46,41 @@ Arguments:
 
 e.g.
 
-$(basename ${0}) --od /full/path/to/my/folder/landsat-albedo/LC80180302015234LGN01 /full/path/to/my/target_xml/LC08_L1TP_018030_20150822_20170225_01_T1.xml /full/path/to/my/mate_xml1/LC08_L1TP_018029_20150822_20170225_01_T1.xml /full/path/to/my/mate_xml2/LC08_L1TP_018031_20150822_20170225_01_T1.xml
+$(basename ${0}) --brdf MODIS -bd /full/path/to/source/brdf/directory --od /full/path/to/my/folder/landsat-albedo /full/path/to/my/target_xml/LC08_L1TP_018030_20150822_20170225_01_T1.xml /full/path/to/my/mate_xml1/LC08_L1TP_018029_20150822_20170225_01_T1.xml /full/path/to/my/mate_xml2/LC08_L1TP_018031_20150822_20170225_01_T1.xml
 
 EOF
+
+function echoErrorStr () 
+{
+    echo -e $(date +"%Y-%m-%d %T")" [ERR] "'\033[31m'${1}'\033[0m'
+}
+function echoWarnStr () 
+{
+    echo -e $(date +"%Y-%m-%d %T")" [WRN] "'\033[33m'${1}'\033[0m'
+}
+function echoInfoStr () 
+{
+    echo -e $(date +"%Y-%m-%d %T")" [INF] "'\033[32m'${1}'\033[0m'
+}
+function echoStatStr () 
+{
+    echo -e $(date +"%Y-%m-%d %T")" [STA] "'\033[0m'${1}'\033[0m'
+}
 
 exe_dir=$(readlink -f ${0} | xargs dirname)
 
 alb_dir="/home/zl69b/Workspace/src/landsat-albedo"
-brdf_dl_cmd="/home/zl69b/Workspace/src/mvp-tools/common-utils/dl_test_mvp.sh"
-brdf_dl_user="landtest"
-brdf_dl_psw="STlads"
 
 run_dir=$(pwd)
+
+MAX_NTILES=9
 
 SNOW=0
 BRDF="MODIS"
 OUTFMT="hdf"
 KEEP_T=0
 KEEP_B=0
-OPTS=`getopt -o s --long od:,snow,brdf:,of:,keep_t,keep_b -n "${0}" -- "$@"`
+OPTS=`getopt -o s --long od:,snow,brdf:,bd:,of:,keep_t,keep_b -n "${0}" -- "$@"`
 if [[ $? != 0 ]]; then echo "Failed parsing options" >&2 ; echo "${USAGE}" ; exit 1 ; fi
 eval set -- "${OPTS}"
 while true;
@@ -74,6 +95,11 @@ do
             case "${2}" in
                 "") shift 2 ;;
                 *) BRDF=${2^^} ; shift 2 ;;
+            esac ;;
+        --bd )
+            case "${2}" in
+                "") shift 2 ;;
+                *) BRDFDIR=${2} ; shift 2 ;;
             esac ;;
         -s | --snow )
             SNOW=1 ; shift ;;
@@ -134,51 +160,49 @@ fi
 angle_exe=${alb_dir}/bin/l8_angles
 pcf_template=${alb_dir}/scripts/multilndalbedo_pcf_template.ini
 
-echo "Getting Landsat albedo from ${XML_LIST[0]}"
+echoStatStr "Getting Landsat albedo from ${XML_LIST[0]}"
 
 # Print some processing metadata before running
-if [[ -x ${brdf_dl_cmd} ]]; then
-    echo "Checked, source BRDF downloading command = ${brdf_dl_cmd}"
-else
-    echo "Not found or executable, source BRDF downloading command = ${brdf_dl_cmd}"
-    exit 2
-fi
 if [[ -x ${mos_exe} ]]; then
-    echo "Checked, source BRDF subsetting command = ${mos_exe}"
+    echoStatStr "Checked, source BRDF subsetting command = ${mos_exe}"
 else
-    echo "Not found or executable, source BRDF subsetting command = ${mos_exe}"
+    echoErrorStr "Not found or executable, source BRDF subsetting command = ${mos_exe}"
     exit 2
 fi
 if [[ -x ${angle_exe} ]]; then
-    echo "Checked, Landsat sun/view angle command = ${angle_exe}"
+    echoStatStr "Checked, Landsat sun/view angle command = ${angle_exe}"
 else
-    echo "Not found or executable, Landsat sun/view angle command = ${angle_exe}"
+    echoErrorStr "Not found or executable, Landsat sun/view angle command = ${angle_exe}"
     exit 2
 fi
 if [[ -r ${pcf_template} ]]; then
-    echo "Checked, Landsat albedo PCF template = ${pcf_template}"
+    echoStatStr "Checked, Landsat albedo PCF template = ${pcf_template}"
 else
-    echo "Not found, Landsat albedo PCF template = ${pcf_template}"
+    echoErrorStr "Not found, Landsat albedo PCF template = ${pcf_template}"
     exit 2
 fi
 if [[ -x ${alb_exe} ]]; then
-    echo "Checked, Landsat albedo generation command = ${alb_exe}"
+    echoStatStr "Checked, Landsat albedo generation command = ${alb_exe}"
 else
-    echo "Not found or executable, Landsat albedo generation command = ${alb_exe}"
+    echoErrorStr "Not found or executable, Landsat albedo generation command = ${alb_exe}"
     exit 2
 fi
 
-echo "Target scene xml = ${XML_LIST[0]}"
-echo "Mate scene xml = ${XML_LIST[1]}"
-for ((i=2; i < ${#XML_LIST[@]}; i++)); 
-do
-    echo "                 ${XML_LIST[i]}"
-done
+echoInfoStr "Target scene xml = ${XML_LIST[0]}"
+if [[ ${#XML_LIST[@]} -gt 1 ]]; then
+    echoInfoStr "Mate scene xml = ${XML_LIST[1]}"
+    for ((i=2; i < ${#XML_LIST[@]}; i++)); 
+    do
+        echoInfoStr "                 ${XML_LIST[i]}"
+    done
+else
+    echoInfoStr "Mate scene xml = NULL"
+fi
 
 # Get product_id
 PRD_ID=$(grep product_id ${XML_LIST[0]} | cut -d'>' -f2 | cut -d'<' -f1 | xargs basename)
 if [[ -z ${PRD_ID} ]]; then
-    echo "Failed to extract product_id from the XML ${XML_LIST[0]}"
+    echoErrorStr "Failed to extract product_id from the XML ${XML_LIST[0]}"
     exit 2
 fi
 # Get acquisition date and doy
@@ -189,9 +213,9 @@ YEAR=${TMP:0:4}
 SCFT_ID=$(grep satellite ${XML_LIST[0]} | cut -d'>' -f2 | cut -d'<' -f1 | xargs)
 
 # Set up input and output directories
-dir_o=${OUTDIR}
+dir_o=${OUTDIR}/${PRD_ID}
 dir_i=$(dirname ${XML_LIST[0]})
-dir_b=${OUTDIR}/brdf
+dir_b=${dir_o}/brdf
 if [ ! -r $dir_o ]; then
     mkdir -p $dir_o
 else
@@ -199,7 +223,7 @@ else
     # it.
     TMP=($(find ${dir_o} -name ${PRD_ID}"_albedo_*"))
     if [[ ${#TMP[@]} -eq 6 ]]; then
-        echo "Warning: ${scene} albedo outputs exists! Skip!"
+        echoWarnStr "Warning: ${scene} albedo outputs exists! Skip!"
         exit 2
     fi
 fi
@@ -210,7 +234,8 @@ fi
 # number of xml files
 num_f=${#XML_LIST[@]}
 mos_xml_param=${XML_LIST[@]}
-# Find the needed MODIS tiles
+
+# check how many tiles we need. 
 mos_out=$($mos_exe NULL NULL NULL ${num_f} ${mos_xml_param} -p | grep -i "tiles")
 tile_hstr=$(echo ${mos_out} | cut -d',' -f1 | cut -d'h' -f2)
 tile_vstr=$(echo ${mos_out} | cut -d',' -f2 | cut -d'v' -f2 | cut -d'.' -f1)
@@ -219,31 +244,34 @@ tile_hmax=$(echo ${tile_hstr} | cut -d'-' -f2)
 tile_vmin=$(echo ${tile_vstr} | cut -d'-' -f1)
 tile_vmax=$(echo ${tile_vstr} | cut -d'-' -f2)
 if [[ -z ${tile_hmin} || -z ${tile_hmax} || -z ${tile_vmin} || -z ${tile_vmax} ]]; then
-    echo "Failed to calculate the needed MODIS/VIIRS tiles."
+    echoErrorStr "Failed to calculate the needed ${BRDF} tiles."
     exit 2
 fi
-
-echo "Downloading ${BRDF} tiles h${tile_hmin}-${tile_hmax}, v${tile_vmin}-${tile_vmax}"
-
-for ((i=0; i<${#brdf_prd[@]}; i++));
-do
-    for ((h=${tile_hmin}; h<=${tile_hmax}; h++));
-    do
-        for ((v=${tile_vmin}; v<=${tile_vmax}; v++)); do
-            ${brdf_dl_cmd} --ftp ladssci.nascom.nasa.gov --user ${brdf_dl_user} --password ${brdf_dl_psw} -f ${brdf_fmt} -t h$(printf %02d ${h})v$(printf %02d ${v}) -y ${YEAR} -p "${brdf_prd[i]}" -n ${brdf_vnum} -o ${dir_b} -b ${DOY} -e ${DOY}
-        done
-    done
-done
+tile_hmin=$(( $(echo ${tile_hmin} | sed 's/^0*//') ))
+tile_hmax=$(( $(echo ${tile_hmax} | sed 's/^0*//') ))
+tile_vmin=$(( $(echo ${tile_vmin} | sed 's/^0*//') ))
+tile_vmax=$(( $(echo ${tile_vmax} | sed 's/^0*//') ))
+if [[ ${tile_hmin} -lt 0 || ${tile_hmax} -gt 35 || ${tile_vmin} -lt 0 || ${tile_vmax} -gt 17 ]]; then
+   echoErrorStr "Illegal tile numbers"
+   exit 2
+fi
+nh=$((${tile_hmax}-${tile_hmin}+1))
+nv=$((${tile_vmax}-${tile_vmin}+1))
+if [[ $(( ${nh} * ${nv} )) -gt ${MAX_NTILES} ]]; then
+    echoWarnStr "Scenes on the edge of Sinusoidal? To be dealt with. Skip this case at the moment."
+    echoWarnStr "Too many tiles to mosaic for the coverage of ${XML_LIST[@]}"
+    exit 0
+fi
 
 # Subset BRDF data
 brdf_ss=()
 for ((i=0; i < ${#brdf_prd[@]}; i++));
 do
     brdf_ss[${i}]=${dir_b}/${brdf_prd[i]}_FOR_${PRD_ID}.${brdf_fmt}
-    echo "Mosaic and subset ${brdf_prd[i]} for $PRD_ID ..."
-    $mos_exe ${dir_b} ${brdf_prd[i]} ${brdf_ss[i]} ${num_f} ${mos_xml_param} -f
+    echoStatStr "Mosaic and subset ${brdf_prd[i]} for $PRD_ID ..."
+    $mos_exe ${BRDFDIR} ${brdf_prd[i]} ${brdf_ss[i]} ${num_f} ${mos_xml_param} -f
     if [ $? -ne 0 ]; then
-        echo "mosaic ${brdf_prd[i]} failed for ${num_f} ${mos_xml_param}"
+        echoErrorStr "mosaic ${brdf_prd[i]} failed for ${num_f} ${mos_xml_param}"
         rm -f ${brdf_ss[i]}
         exit 2
     fi
@@ -252,7 +280,7 @@ done
 mod_a1=`readlink -m ${brdf_ss[0]}`
 mod_a2=`readlink -m ${brdf_ss[1]}`
 
-echo "Generating solar and view angle images..."
+echoStatStr "Generating solar and view angle images..."
 cd ${dir_i}
 angle_file=${PRD_ID}"_ANG.txt"
 if [[ ${SCFT_ID} == "LANDSAT_8"  ]]; then
@@ -267,10 +295,20 @@ fi
 
 cd ${run_dir}
 
-echo "Processing $PRD_ID albedo..."
+echoStatStr "Processing Landsat albedo for $PRD_ID ..."
 
 SR_TARGET_XML=${XML_LIST[0]}
-SR_MATES_XMLS=(${XML_LIST[@]:1})
+
+if [[ ${#XML_LIST[@]} -le 1 ]]; then
+    # only target xml but no mate xmls.
+    SR_MATES_XMLS="NULL"
+else
+    printf -v SR_MATES_XMLS "%s" "${XML_LIST[1]}"
+    for ((i=2; i < ${#XML_LIST[@]}; i++));
+    do
+        printf -v SR_MATES_XMLS "%s\n\t%s" "${SR_MATES_XMLS}" "${XML_LIST[i]}"
+    done
+fi
 
 read -r -d '' SR_ANG_IMGS <<EOF
 $(tmp=$(find ${dir_i} -name "*sensor_B02.img"); if [[ -z ${tmp} ]]; then echo NULL; else echo ${tmp}; fi)
@@ -299,18 +337,20 @@ ${alb_exe} ${this_pcf}
 if [[ $? -ne 0 ]]; then
     # Remove every output except PCF file for diagnosis.
     find ${dir_o} -maxdepth 1 -type f ! -name "*.ini" | xargs rm -f
-    echo "Run albedo failed for $PRD_ID"
-    echo "$PRD_ID ALBEDO_FAIL" >>    ${err}
-    exit 1
+    echoErrorStr "Failed Landsat albedo for $PRD_ID"
+else 
+    echoStatStr "Got Landsat albedo for $PRD_ID"
 fi
 
 # if succeed, clean the inputs and the tempdir
 if [[ ${KEEP_B} -eq 0 ]]; then
+    echoStatStr "Clean subset data of source BRDF in ${dir_b}"
     rm -rf ${dir_b}
 fi
 if [[ ${KEEP_T} -eq 0 ]]; then
+    echoStatStr "Clean intermediate temporary outputs in ${TEMPDIR}"
     rm -rf ${TEMPDIR}
 fi
 
-echo "Got Landsat albedo from ${XML_LIST[0]}."
 echo ""
+exit 0
