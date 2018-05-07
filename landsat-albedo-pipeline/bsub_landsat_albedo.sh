@@ -16,6 +16,28 @@ Options:
     job names to busb.
 
   --wait="WAIT_CONDITION_TO_BSUB_WAIT", optional
+    A string in the syntax of bsub waiting condition,
+    https://www.ibm.com/support/knowledgecenter/en/SSETD4_9.1.3/lsf_command_ref/bsub.w.1.html. This
+    pipeline will not start until the condition givne by this string
+    is met.
+
+  --archive_server_ip="SERVER_IP_TO_ARCHIVE_ALBEDO", optional
+    A string of URL or explicit IP address (for UMB local servers) to
+    the server where to store the albedo data.
+
+  --archive_server_dir="SERVER_DIR_TO_ARCHIVE_ALBEDO", optional
+    A string of a directory on the archival server to store the albedo
+    data.
+
+  --archive_server_user="USER_NAME_TO_ACCESS_ARCHIVAL_SERVER", optional
+    Your user name to access the archival server. 
+
+  --archive_server_key="PRIVATE_SSH_KEY_TO_ACCESS_ARCHIVAL_SERVER", optional
+    Your private ssh key on this computer (where you run this script)
+    to access the archival server. The access to the archival server
+    must be through ssh kyes to ensure the automatic data transfer to
+    the archival server without entering your password to the archival
+    server every time.
 
 Arguments:
 
@@ -33,21 +55,15 @@ EOF
 # ********************************************************************
 # Set up some variables. We may move them into user-input
 # options/arguments in future.
-QUERY_TOA_CMD="python /home/zl69b/Workspace/src/landsat-tools/landsat-data-access/query_landsat_cloud.py"
-DL_TOA_CMD="python /home/zl69b/Workspace/src/landsat-tools/landsat-data-access/download_landsat_cloud.py"
+DL_TOA_CMD="python $(dirname $(readlink -f ${0}))/../landsat-data-access/download_landsat_cloud.py"
 GEN_SR_CMD="$(dirname $(readlink -f ${0}))/gen_landsat_sr.sh"
 GET_BRDF_CMD="$(dirname $(readlink -f ${0}))/get_source_brdf.sh"
 GEN_ALBEDO_CMD="$(dirname $(readlink -f ${0}))/gen_landsat_albedo.sh"
-
-DATA_ARCH_SERVER="158.121.247.109"
-DATA_ARCH_SERVER_USER="zhan.li"
-DATA_ARCH_DIR="/charles/data03/albedo/zhan.li/projects/lst-meeting-201802/na-albedo-archive"
-PRIV_KEY_FILE="/home/zl69b/.ssh/id_rsa_for_umb"
 # ********************************************************************
 
 SNOW=0
 PIPE_IDX="p1"
-OPTS=`getopt -o s --long od:,snow,wait:,prefix: -n "${0}" -- "$@"`
+OPTS=`getopt -o s --long od:,snow,wait:,prefix:,archive_server_ip:,archive_server_dir:,archive_server_user:,archive_server_key: -n "${0}" -- "$@"`
 if [[ $? != 0 ]]; then echo "Failed parsing options" >&2 ; echo "${USAGE}" ; exit 1 ; fi
 eval set -- "${OPTS}"
 while true;
@@ -70,6 +86,26 @@ do
             esac ;;
         -s | --snow )
             SNOW=1 ; shift ;;
+        --archive_server_ip )
+            case "${2}" in
+                "") shift 2 ;;
+                *) DATA_ARCH_SERVER=${2} ; shift 2 ;;
+            esac ;;
+        --archive_server_dir )
+            case "${2}" in
+                "") shift 2 ;;
+                *) DATA_ARCH_DIR=${2} ; shift 2 ;;
+            esac ;;
+        --archive_server_user )
+            case "${2}" in
+                "") shift 2 ;;
+                *) DATA_ARCH_SERVER_USER=${2} ; shift 2 ;;
+            esac ;;
+        --archive_server_key )
+            case "${2}" in
+                "") shift 2 ;;
+                *) PRIV_KEY_FILE=${2} ; shift 2 ;;
+            esac ;;
         -- ) shift ; break ;;
         * ) break ;;
     esac
@@ -83,6 +119,16 @@ fi
 
 if [[ ${SNOW} -eq 1 ]]; then
     GEN_ALBEDO_CMD="${GEN_ALBEDO_CMD} -s"
+fi
+
+DO_ARCH=0
+if [[ ! -z ${DATA_ARCH_SERVER} ]] || [[ ! -z ${DATA_ARCH_DIR} ]] || [[ ! -z ${DATA_ARCH_SERVER_USER} ]] || [[ ! -z ${PRIV_KEY_FILE} ]]; then
+    DO_ARCH=1
+    if [[ -z ${DATA_ARCH_SERVER} ]] || [[ -z ${DATA_ARCH_DIR} ]] || [[ -z ${DATA_ARCH_SERVER_USER} ]] || [[ -z ${PRIV_KEY_FILE} ]]; then
+        echo "To archive data on a designated server, the four options must be all given: --archive_server_ip, --archive_server_dir, --archive_server_user, --archive_server_key"
+        echo "${USAGE}"
+        exit 1
+    fi
 fi
 
 bjob_s02_name="${PIPE_IDX}-dl-landsat-toa"
@@ -270,11 +316,11 @@ if [[ ${LSB_JOBINDEX} -le ${#SCN_XML_ARR[@]} ]]; then
 fi
 EOF
 
-
-# Archive data to UMB local server for storage
-data_archive_bsub=${BSUB_DIR}/$(echo ${bjob_s06_name} | tr '-' '_').sh
-EST_TIME=$((${N_BASE_SCN}*1/60 + 1))
-cat <<EOF > ${data_archive_bsub}
+if [[ ${DO_ARCH} -eq 1 ]]; then
+    # Archive data to UMB local server for storage
+    data_archive_bsub=${BSUB_DIR}/$(echo ${bjob_s06_name} | tr '-' '_').sh
+    EST_TIME=$((${N_BASE_SCN}*1/60 + 1))
+    cat <<EOF > ${data_archive_bsub}
 #BSUB -J "${bjob_s06_name}"
 #BSUB -e ${LOG_DIR}/${bjob_s06_name}.%J.e
 #BSUB -o ${LOG_DIR}/${bjob_s06_name}.%J.o
@@ -294,9 +340,13 @@ rm -rf ${ALBEDO_DIR}
 
 EOF
 
+fi
+
 # Submit the jobs
 bsub < ${dl_toa_bsub}
 bsub < ${gen_sr_bsub}
 bsub < ${get_brdf_bsub}
 bsub < ${gen_albedo_bsub}
-bsub < ${data_archive_bsub}
+if [[ ${DO_ARCH} -eq 1 ]]; then
+    bsub < ${data_archive_bsub}
+fi
