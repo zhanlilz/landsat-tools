@@ -202,7 +202,7 @@ cat <<EOF > ${gen_sr_bsub}
 #BSUB -o ${LOG_DIR}/${bjob_s03_name}.%J.%I.o
 #BSUB -w "ended(${bjob_s02_name})"
 #BSUB -n 4
-#BSUB -R "rusage[mem=2560]"
+#BSUB -R "rusage[mem=640]"
 #BSUB -R "span[hosts=1]"
 #BSUB -R "select[hname!=c24b08 && hname!=c23b04 && hname!=c16b07 && hname!=c31b02]"
 #BSUB -W ${EST_TIME}:00
